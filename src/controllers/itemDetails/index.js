@@ -322,10 +322,8 @@ function renderSubtitleSelections(page, mediaSources) {
 }
 
 function reloadPlayButtons(page, item) {
-    console.log('reloadPlayButtons called for item type:', item.Type);
     let canPlay = false;
-
-    // Hide continue playlist button by default
+    
     hideAll(page, 'btnContinuePlaylist');
 
     if (item.Type == 'Program') {
@@ -342,7 +340,6 @@ function reloadPlayButtons(page, item) {
         hideAll(page, 'btnInstantMix');
         hideAll(page, 'btnShuffle');
     } else if (playbackManager.canPlay(item)) {
-        console.log('Item can play, checking if playlist...');
         hideAll(page, 'btnPlay', true);
         const enableInstantMix = ['Audio', 'MusicAlbum', 'MusicGenre', 'MusicArtist'].indexOf(item.Type) !== -1;
         hideAll(page, 'btnInstantMix', enableInstantMix);
@@ -360,7 +357,6 @@ function reloadPlayButtons(page, item) {
                 btnPlay.title = globalize.translate('Play');
             }
         }
-
     } else {
         hideAll(page, 'btnPlay');
         hideAll(page, 'btnReplay');
@@ -1996,7 +1992,6 @@ export default function (view, params) {
         Promise.all([getPromise(apiClient, pageParams), apiClient.getCurrentUser()]).then(([item, user]) => {
             currentItem = item;
             reloadFromItem(instance, page, pageParams, item, user);
-
             if (item.Type === 'Playlist') {
                 checkPlaylistForContinue(page, item);
             }
