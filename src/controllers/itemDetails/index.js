@@ -322,7 +322,11 @@ function renderSubtitleSelections(page, mediaSources) {
 }
 
 function reloadPlayButtons(page, item) {
+    console.log('reloadPlayButtons called for item type:', item.Type);
     let canPlay = false;
+
+    // Hide continue playlist button by default
+    hideAll(page, 'btnContinuePlaylist');
 
     if (item.Type == 'Program') {
         const now = new Date();
@@ -338,6 +342,7 @@ function reloadPlayButtons(page, item) {
         hideAll(page, 'btnInstantMix');
         hideAll(page, 'btnShuffle');
     } else if (playbackManager.canPlay(item)) {
+        console.log('Item can play, checking if playlist...');
         hideAll(page, 'btnPlay', true);
         const enableInstantMix = ['Audio', 'MusicAlbum', 'MusicGenre', 'MusicArtist'].indexOf(item.Type) !== -1;
         hideAll(page, 'btnInstantMix', enableInstantMix);
@@ -355,6 +360,7 @@ function reloadPlayButtons(page, item) {
                 btnPlay.title = globalize.translate('Play');
             }
         }
+
     } else {
         hideAll(page, 'btnPlay');
         hideAll(page, 'btnReplay');
@@ -1926,6 +1932,62 @@ export default function (view, params) {
         return params.serverId ? ServerConnections.getApiClient(params.serverId) : ApiClient;
     }
 
+    async function checkPlaylistForContinue(page, item) {
+        const apiClient = getApiClient();
+        
+        const result = await apiClient.getItems(apiClient.getCurrentUserId(), {
+            ParentId: item.Id,
+            Fields: 'UserData',
+        });
+        
+        //Searches through playlist to find if there is an item that has playtime left in the playlist
+        const hasItemToResume = result.Items.some(playlistItem => 
+            (playlistItem.UserData && 
+             playlistItem.UserData.PlaybackPositionTicks > 0 && 
+             !playlistItem.UserData.Played) ||
+            (!playlistItem.UserData || !playlistItem.UserData.Played)
+        );
+        
+        if (hasItemToResume) {
+            hideAll(page, 'btnContinuePlaylist', true);
+        }
+    }
+
+    async function onContinuePlaylistClick() {
+        const apiClient = getApiClient();
+        
+        const result = await apiClient.getItems(apiClient.getCurrentUserId(), {
+            ParentId: currentItem.Id,
+            Fields: 'UserData'
+        });
+        
+        let itemToContinue = result.Items.find(item => 
+            item.UserData && 
+            item.UserData.PlaybackPositionTicks > 0 && 
+            !item.UserData.Played
+        );
+        
+        let startPositionTicks = 0;
+
+        if (!itemToContinue) {
+            itemToContinue = result.Items.find(item => 
+                !item.UserData || !item.UserData.Played
+            );
+        } else {
+            startPositionTicks = itemToContinue.UserData.PlaybackPositionTicks;
+        }
+
+        if (itemToContinue) {
+            const startIndex = result.Items.findIndex(item => item.Id === itemToContinue.Id);
+
+            playbackManager.play({
+                items: result.Items,
+                startIndex: startIndex,
+                startPositionTicks: startPositionTicks
+            });
+        }
+    }
+
     function reload(instance, page, pageParams) {
         loading.show();
 
@@ -1934,6 +1996,10 @@ export default function (view, params) {
         Promise.all([getPromise(apiClient, pageParams), apiClient.getCurrentUser()]).then(([item, user]) => {
             currentItem = item;
             reloadFromItem(instance, page, pageParams, item, user);
+
+            if (item.Type === 'Playlist') {
+                checkPlaylistForContinue(page, item);
+            }
         }).catch((error) => {
             console.error('failed to get item or current user: ', error);
         });
@@ -2100,6 +2166,7 @@ export default function (view, params) {
         const apiClient = getApiClient();
 
         bindAll(view, '.btnPlay', 'click', onPlayClick);
+        bindAll(view, '.btnContinuePlaylist', 'click', onContinuePlaylistClick);
         bindAll(view, '.btnReplay', 'click', onPlayClick);
         bindAll(view, '.btnInstantMix', 'click', onInstantMixClick);
         bindAll(view, '.btnShuffle', 'click', onShuffleClick);
